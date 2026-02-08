@@ -1,4 +1,4 @@
-# SMO_Randomizer_Tracker
+# SMO Randomizer Tracker
 
 A live tracker + OBS overlay for Super Mario Odyssey Ranomizer speedruns.
 
