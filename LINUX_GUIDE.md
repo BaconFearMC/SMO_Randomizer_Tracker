@@ -1,4 +1,4 @@
-## How to run/compile on Linux (Arch/CachyOS)
+## How to compile yourself on Linux (Arch/CachyOS)
 
 1. Install Tkinter via your package manager:
    sudo pacman -S tk
