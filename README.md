@@ -39,5 +39,3 @@ After you've opened the tracker, getting started is very easy!
 
 Made by FireRisingRaging and Just Bag assisted by GMO7
 Forked by BaconFearMC and made Native on Linux by @okie8260 on Discord
-
-<sub>Made by <img width="766" height="706" alt="image" src="https://github.com/user-attachments/assets/41b77881-2be3-420d-9340-2adaf475ad68" /></sub>
