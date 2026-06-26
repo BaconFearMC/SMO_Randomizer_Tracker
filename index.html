@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>SMO Randomizer Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="assets/SMO-ColoredGlobe.png">
+  <style>
+    .counted-badge {
+      background: rgba(74, 222, 128, 0.18);
+      color: #4ade80;
+      border: 1px solid rgba(74, 222, 128, 0.4);
+      border-radius: 4px;
+      font-size: 0.65rem;
+      padding: 1px 4px;
+      margin-left: 4px;
+      white-space: nowrap;
+    }
+    .settings-subsection-header {
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #aaa;
+      padding: 8px 0 2px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      margin-bottom: 2px;
+    }
+    .bv-input {
+      width: 48px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1 class="header">
+      <span>SMO Randomizer Tracker</span>
+      <button class="ctrl-btn gear-btn" id="btn-settings" style="position:absolute;right:0;top:50%;transform:translateY(-50%);">⚙</button>
+    </h1>
+
+    <!-- Moon Rows + Side Counters layout -->
+    <div id="tracker-layout">
+      <div id="moon-rows"></div>
+      <div id="side-counters-col"></div>
+    </div>
+
+    <!-- Total Moon Count -->
+    <div id="total-moon-wrap">
+      <span class="total-moon-label">Total Moons:</span>
+      <span id="total-moon-display" class="total-moon-count">0 / 124</span>
+    </div>
+
+    <!-- Sync -->
+    <div id="sync-section">
+      <div id="sync-room-row">
+        <input type="password" id="input-room-code" placeholder="Room code" maxlength="12" spellcheck="false">
+        <button class="ctrl-btn" id="btn-toggle-visibility" title="Show/hide room code and URL">Show</button>
+        <button class="ctrl-btn accent-btn" id="btn-generate-room">Generate</button>
+        <button class="ctrl-btn accent-btn" id="btn-connect-room">Connect</button>
+      </div>
+      <div id="sync-status">Offline. Enter a room code to sync</div>
+      <div id="sync-url-row" class="hidden">
+        <input type="password" id="input-obs-url" readonly>
+        <button class="ctrl-btn" id="btn-copy-obs-url">Copy OBS URL</button>
+      </div>
+      <div id="sync-size-row" class="hidden">OBS size: <strong>315</strong> × <strong>450</strong></div>
+    </div>
+
+    <!-- Controls -->
+    <div id="controls">
+      <div id="capture-section">
+        <div id="capture-row"></div>
+      </div>
+
+      <div id="button-section">
+        <div id="obs-btn-row">
+          <button class="ctrl-btn obs-btn" id="btn-obs">Open OBS Popup</button>
+          <button class="ctrl-btn info-btn" id="btn-obs-info" title="OBS Setup Help">ℹ️</button>
+        </div>
+        <button class="ctrl-btn danger-btn" id="btn-clear">Clear Tracker</button>
+      </div>
+
+      <div id="notes-section"></div>
+
+      <div id="ability-section">
+        <div id="ability-row"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── OBS Info Modal ──────────────────────────────────────────────────────── -->
+  <div id="obs-info-modal" class="modal-backdrop hidden" role="dialog" aria-label="OBS Setup Info">
+    <div class="modal-box obs-info-modal-box">
+      <div class="modal-header">
+        <h2>ℹ️ OBS Setup</h2>
+        <button class="modal-close" id="obs-info-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body obs-info-body">
+        <p class="info-title">Browser Source <span class="info-tag">Recommended</span></p>
+        <ol>
+          <li>Enter or generate a <strong>Room Code</strong>, then click <strong>Connect</strong></li>
+          <li>Copy the <strong>OBS URL</strong> that appears</li>
+          <li>In OBS add a <strong>Browser Source</strong></li>
+          <li>Paste the OBS URL. Default size is <strong>315</strong> × <strong>450</strong></li>
+          <li>Change <strong>OBS Overlay Scale</strong> in Settings to resize. The OBS URL auto-updates.</li>
+          <li>The overlay background is transparent — no chroma key needed</li>
+        </ol>
+        <p class="info-title">Popup Window</p>
+        <p>Click <strong>Open OBS Popup</strong> to open a popup window. Capture it with Window Capture in OBS. Set custom background color in Settings → OBS Background Color.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Settings Modal ─────────────────────────────────────────────────────── -->
+  <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-label="Settings">
+    <div class="modal-box settings-modal-box">
+      <div class="modal-header">
+        <h2>⚙ Settings</h2>
+        <button class="modal-close" id="settings-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body settings-body">
+
+        <!-- Section: Display -->
+        <div class="settings-section-header">Display</div>
+
+        <div class="settings-row">
+          <span>Total Moon Count</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-moon-total"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Icon Colors</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-icon-colors"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>White Icon Mode</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-white-icons"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Moon Tick Icons (SmallAnt-style)</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-moontick"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Highlight Complete Rows</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-complete-color"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Moon Min/Max Range</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-moon-range"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Multi Moon Buttons</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-multi-moon"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Save Buttons (per row)</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-save-buttons"><span class="toggle-track"></span></label>
+        </div>
+
+        <!-- Section: Icons -->
+        <div class="settings-section-header">Icons &amp; Abilities</div>
+
+        <div class="settings-row">
+          <span>Ability Lock</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-ability-lock"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Lock &amp; Peace Icon</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-peace"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Captures Section</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-captures"><span class="toggle-track"></span></label>
+        </div>
+
+        <!-- Section: Optional Counters -->
+        <div class="settings-section-header">Optional Counters <span class="settings-section-note">(not counted in total)</span></div>
+
+        <div class="settings-row">
+          <span>Moon Kingdom Counter</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-moon-kingdom"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Cap Kingdom Counter</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-cap-kingdom"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Cloud Kingdom Counter</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-cloud-kingdom"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Capture Counter (Star)</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-star-counter"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>Movement Counter (Dark)</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-dark-counter"><span class="toggle-track"></span></label>
+        </div>
+
+        <!-- Section: Numbers -->
+        <div class="settings-section-header">Numbers</div>
+
+        <div class="settings-row">
+          <span>Total Moon Requirement</span>
+          <div class="input-save-pair">
+            <input type="number" id="input-moon-req" placeholder="124" min="1" max="9999">
+            <button class="save-inline-btn" id="save-moon-req">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>OBS Overlay Scale</span>
+          <div class="input-save-pair">
+            <input type="number" id="input-overlay-scale" placeholder="1" min="0.1" max="10" step="0.1">
+            <button class="save-inline-btn" id="save-overlay-scale">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Notes Scroll Speed (px)</span>
+          <div class="input-save-pair">
+            <input type="number" id="input-notes-scroll" placeholder="500" min="10" max="2000">
+            <button class="save-inline-btn" id="save-notes-scroll">Save</button>
+          </div>
+        </div>
+
+        <!-- Section: OBS -->
+        <div class="settings-section-header">OBS</div>
+
+        <div class="settings-row">
+          <span>Hide Optional Kingdoms in OBS</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-obs-hide-optional"><span class="toggle-track"></span></label>
+        </div>
+        <div class="settings-row">
+          <span>OBS Background Color</span>
+          <div class="input-save-pair obs-bg-pair">
+            <label class="obs-transparent-label"><input type="checkbox" id="toggle-obs-transparent"> Transparent</label>
+            <input type="color" id="input-obs-bg-color" value="#181818">
+            <button class="save-inline-btn" id="save-obs-bg">Save</button>
+          </div>
+        </div>
+
+        <!-- Section: Sync -->
+        <div class="settings-section-header">Sync</div>
+
+        <div class="settings-row">
+          <span>Sync Server URL</span>
+          <div class="input-save-pair">
+            <input type="text" id="input-ws-url" placeholder="wss://smo-rand.johnnycyan.com/ws" spellcheck="false">
+            <button class="save-inline-btn" id="save-ws-url">Save</button>
+          </div>
+        </div>
+
+        <!-- Section: Controls -->
+        <div class="settings-section-header">Controls</div>
+
+        <div class="settings-row">
+          <span>Scroll Left Button</span>
+          <button class="rebind-btn" id="rebind-scroll-left">Mouse 4</button>
+        </div>
+        <div class="settings-row">
+          <span>Scroll Right Button</span>
+          <button class="rebind-btn" id="rebind-scroll-right">Mouse 5</button>
+        </div>
+
+        <!-- Section: Spoiler Log -->
+        <div class="settings-section-header">Spoiler Log</div>
+
+        <div class="settings-row">
+          <span>Load from .txt or .json file</span>
+          <button class="save-inline-btn spoiler-load-btn" id="btn-load-spoiler">Load Spoiler Log</button>
+        </div>
+        <div class="settings-row">
+          <span>Search loaded spoiler log</span>
+          <button class="save-inline-btn" id="btn-open-spoiler">Open Search</button>
+        </div>
+
+        <button class="ctrl-btn revert-btn" id="btn-revert-settings">Revert to Default Settings</button>
+
+        <!-- Section: Button Visibility -->
+        <div class="settings-section-header">Button Visibility <span class="settings-section-note">(set to 0 to hide)</span></div>
+
+        <div id="bv-section-sync" class="settings-subsection-header">Sync</div>
+        <div class="settings-row">
+          <span>Show/Hide Room Code</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-toggle-visibility" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-toggle-visibility">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Generate Room</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-generate-room" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-generate-room">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Connect/Disconnect</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-connect-room" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-connect-room">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Copy OBS URL</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-copy-obs-url" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-copy-obs-url">Save</button>
+          </div>
+        </div>
+
+        <div id="bv-section-obs" class="settings-subsection-header">OBS</div>
+        <div class="settings-row">
+          <span>Open OBS Popup</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-obs" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-obs">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>OBS Info (ℹ️)</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-obs-info" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-obs-info">Save</button>
+          </div>
+        </div>
+
+        <div id="bv-section-tracker" class="settings-subsection-header">Tracker Controls</div>
+        <div class="settings-row">
+          <span>Clear Tracker</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-clear" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-clear">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Loading Zone Notes</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-notes" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-notes">Save</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Connection Map</span>
+          <div class="input-save-pair">
+            <input type="number" class="bv-input" data-bv-id="btn-map" min="0" max="1" step="1" value="1">
+            <button class="save-inline-btn bv-save-btn" data-bv-id="btn-map">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Loading Zones Modal ───────────────────────────────────────────────── -->
+  <div id="lz-modal" class="modal-backdrop hidden" role="dialog" aria-label="Loading Zone Notes">
+    <div class="modal-box lz-modal-box">
+      <div class="modal-header">
+        <h2>Loading Zone Notes</h2>
+        <div class="modal-header-actions">
+          <button class="modal-icon-btn danger-text" id="lz-clear-notes" title="Clear all notes">🗑 Clear</button>
+          <button class="modal-icon-btn" id="lz-popout" title="Open in separate window">⤢</button>
+          <button class="modal-close" id="lz-close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div class="lz-scroll-wrap">
+        <div id="lz-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Spoiler Log Modal ─────────────────────────────────────────────────── -->
+  <div id="spoiler-modal" class="modal-backdrop hidden" role="dialog" aria-label="Spoiler Log Search">
+    <div class="modal-box spoiler-modal-box">
+      <div class="modal-header">
+        <h2>🗂 Spoiler Log Search</h2>
+        <button class="modal-close" id="spoiler-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body spoiler-body">
+        <input type="text" id="spoiler-search-input" class="spoiler-search-input" placeholder="Search location or item…" spellcheck="false" autocomplete="off">
+        <div id="spoiler-results" class="spoiler-results"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="author-credit">Made by FireRisingRaging, Just Bag, gmo7, and JohnnyCyan</div>
+
+  <script src="sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

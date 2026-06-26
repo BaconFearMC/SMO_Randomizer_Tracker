@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OBS Overlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+  <style>
+    :root { --text: #fff; --font: 'Fredoka One', sans-serif; --green: #4ade80; }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 315px;
+      height: 450px;
+      overflow: hidden;
+      background: transparent;
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    #obs-root {
+      display: flex;
+      flex-direction: row;
+      width: 315px;
+      height: 450px;
+      transform-origin: top left;
+    }
+
+    html.popup-mode, body.popup-mode { width: 100vw; height: 100vh; }
+
+    /* ── Left column: moon rows ───── */
+    #obs-moon-list {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 4px;
+      padding: 8px 4px 8px 8px;
+      flex-shrink: 0;
+    }
+
+    .obs-moon-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+    .obs-moon-row.row-complete { background: rgba(74, 222, 128, 0.18); }
+    .obs-moon-row.obs-optional-row { opacity: 0.85; }
+    .obs-moon-row.obs-hidden { display: none !important; }
+
+    .obs-lock-peace-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+    .obs-lock-peace-stack img {
+      width: 14px; height: 14px; object-fit: contain;
+    }
+    .obs-lock-peace-stack img.hidden-icon { display: none !important; }
+    .obs-moon-row img.obs-kingdom {
+      height: 33px; width: 33px; object-fit: contain; transition: filter 0.2s;
+    }
+    .obs-moon-row img.obs-kingdom.icon-white { filter: brightness(0) invert(1); }
+
+    /* Moontick icons — never white */
+    .obs-moon-row img.obs-moontick {
+      height: 24px; width: 24px; object-fit: contain;
+      /* Never forced white */
+    }
+    .obs-moon-row img.obs-moontick.hidden { display: none !important; }
+
+    .obs-count {
+      font-size: 1.35rem;
+      white-space: nowrap;
+      min-width: 52px;
+      text-align: center;
+      transition: color 0.2s;
+    }
+    .obs-count.count-complete { color: var(--green); }
+
+    /* Lock/peace hidden states */
+    .obs-lock.hidden-icon, .obs-peace.hidden-icon { display: none !important; }
+
+    /* ── Right column ─────────────── */
+    #obs-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 8px 8px 4px;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .obs-section-header { font-size: 0.9rem; text-align: center; letter-spacing: 0.05em; padding: 4px 0 2px; width: 100%; }
+    .obs-icon-row { display: flex; flex-direction: row; gap: 5px; justify-content: center; }
+    .obs-icon-row img { height: 36px; width: 36px; object-fit: contain; }
+
+    #obs-bowser { display: flex; justify-content: center; padding: 4px 0; }
+    #obs-bowser img { height: 40px; width: 40px; object-fit: contain; }
+
+    #obs-total-wrap { display: flex; flex-direction: column; align-items: center; padding: 4px 0 2px; }
+    #obs-total-label { font-size: 0.9rem; letter-spacing: 0.05em; }
+    #obs-total { font-size: 1.4rem; text-align: center; letter-spacing: 0.05em; padding: 4px 0 2px; }
+
+    /* Sections that may be hidden via settings */
+    #obs-capture-section.hidden,
+    #obs-ability-section.hidden,
+    #obs-bowser.hidden,
+    #obs-total-wrap.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="obs-root">
+    <div id="obs-moon-list"></div>
+    <div id="obs-right">
+      <div id="obs-capture-section">
+        <div class="obs-section-header">Moon Cave</div>
+        <div class="obs-icon-row" id="obs-capture-icons"></div>
+      </div>
+      <div id="obs-ability-section">
+        <div class="obs-section-header">Cave Skip</div>
+        <div class="obs-icon-row" id="obs-ability-icons"></div>
+      </div>
+      <div id="obs-bowser"><img id="obs-bowser-img" src="assets/Bowser_Capture_Locked.png" alt="Bowser"></div>
+      <div id="obs-total-wrap">
+        <div id="obs-total-label">Moons:</div>
+        <div id="obs-total">0 / 124</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sync.js"></script>
+  <script>
+    'use strict';
+
+    const STATE_KEY = 'tracker_state';
+    const BASE_W = 315;
+    const BASE_H = 450;
+
+    const params  = new URLSearchParams(window.location.search);
+    const isPopup = !!params.get('popup');
+    const room    = params.get('room');
+    const wsUrl   = params.get('ws');
+    const bgParam = params.get('bg');
+
+    let serverMode = false;
+
+    const KINGDOMS = [
+      { name: 'Cascade Kingdom',  img: 'assets/Cascade.png',  moontick: 'assets/moontickCascade.png',  max: 10 },
+      { name: 'Sand Kingdom',     img: 'assets/Sand.png',     moontick: 'assets/moontickSand.png',     max: 21 },
+      { name: 'Lake Kingdom',     img: 'assets/Lake.png',     moontick: 'assets/moontickLake.png',     max: 13 },
+      { name: 'Wooded Kingdom',   img: 'assets/Wooded.png',   moontick: 'assets/moontickWooded.png',   max: 21 },
+      { name: 'Lost Kingdom',     img: 'assets/Lost.png',     moontick: 'assets/moontickLost.png',     max: 15 },
+      { name: 'Metro Kingdom',    img: 'assets/Metro.png',    moontick: 'assets/moontickMetro.png',    max: 25 },
+      { name: 'Snow Kingdom',     img: 'assets/Snow.png',     moontick: 'assets/moontickSnow.png',     max: 15 },
+      { name: 'Seaside Kingdom',  img: 'assets/Seaside.png',  moontick: 'assets/moontickSeaside.png',  max: 15 },
+      { name: 'Luncheon Kingdom', img: 'assets/Luncheon.png', moontick: 'assets/moontickLuncheon.png', max: 23 },
+      { name: 'Ruined Kingdom',   img: 'assets/Ruin.png',     moontick: 'assets/moontickRuined.png',   max: 8  },
+      { name: 'Bowser Kingdom',   img: 'assets/Bowser.png',   moontick: 'assets/moontickBowser.png',   max: 13 },
+    ];
+
+    // Moon Kingdom always shown below Bowser, never hidden by obs_hide_optional
+    const MOON_KINGDOM = { key: 'moon_kingdom', img: 'assets/Moon.png', moontick: 'assets/moontickMoon.png', label: 'Moon' };
+
+    // Side optional counters — hidden in OBS if obs_hide_optional is true
+    const OPTIONAL_SIDE = [
+      { key: 'cap_kingdom',   img: 'assets/Cap.png',  label: 'Cap'   },
+      { key: 'cloud_kingdom', img: 'assets/Cloud.png', label: 'Cld'  },
+      { key: 'star_counter',  img: 'assets/Star.png', label: 'Cap★'  },
+      { key: 'dark_counter',  img: 'assets/Dark.png', label: 'Mov'   },
+    ];
+
+    const CAPTURE_ICONS = [
+      { key: 'parabones', locked: 'assets/Parabones_Capture_Locked.png',   unlocked: 'assets/Parabones_Capture.png'      },
+      { key: 'banzai',    locked: 'assets/Banzai_Bill_Capture_Locked.png', unlocked: 'assets/Banzai_Bill_Capture.png'    },
+      { key: 'wire',      locked: 'assets/Spark_pylon_Capture_Locked.png', unlocked: 'assets/Spark_pylon_Capture.png'    },
+    ];
+
+    const ABILITY_ICONS = [
+      { key: 'jump', locked: 'assets/Long_Jump_Locked.png', unlocked: 'assets/Long_Jump.png' },
+      { key: 'cap',  locked: 'assets/Cappy_Locked.png',     unlocked: 'assets/Cappy.png'     },
+      { key: 'wall', locked: 'assets/Wall_Jump_Locked.png', unlocked: 'assets/Wall_Jump.png' },
+    ];
+
+    let currentState = null;
+
+    function loadTrackerState() {
+      try {
+        const raw = localStorage.getItem(STATE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    }
+
+    function getScale() {
+      if (isPopup) return Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
+      const urlScale = parseFloat(params.get('scale'));
+      const settingsScale = currentState && currentState.settings ? currentState.settings.overlay_scale : null;
+      return urlScale || settingsScale || 1;
+    }
+
+    function applyScale() {
+      const scale = getScale();
+      const root = document.getElementById('obs-root');
+      const html = document.documentElement;
+      const body = document.body;
+      root.style.transform = `scale(${scale})`;
+      if (isPopup) {
+        html.style.width = '100vw'; html.style.height = '100vh';
+        body.style.width = '100vw'; body.style.height = '100vh';
+      } else {
+        html.style.width = `${BASE_W * scale}px`; html.style.height = `${BASE_H * scale}px`;
+        body.style.width = `${BASE_W * scale}px`; body.style.height = `${BASE_H * scale}px`;
+      }
+    }
+
+    function applyBackground() {
+      let bg = bgParam || (currentState && currentState.settings ? currentState.settings.obs_bg_color : null) || 'transparent';
+      if (isPopup) {
+        document.body.style.background = bg === 'transparent' ? '#181818' : bg;
+        document.documentElement.style.background = bg === 'transparent' ? '#181818' : bg;
+      } else {
+        document.body.style.background = bg === 'transparent' ? 'transparent' : bg;
+        document.documentElement.style.background = bg === 'transparent' ? 'transparent' : bg;
+      }
+    }
+
+    function buildOBSLayout() {
+      const moonList = document.getElementById('obs-moon-list');
+      moonList.innerHTML = '';
+
+      // Main kingdom rows
+      KINGDOMS.forEach((k, i) => {
+        moonList.appendChild(buildMoonRow(i, k, false));
+        // Insert Moon Kingdom row directly below Bowser
+        if (k.name === 'Bowser Kingdom') {
+          moonList.appendChild(buildMoonRow('moon_kingdom', MOON_KINGDOM, true));
+        }
+      });
+
+      // Capture icons
+      const captureRow = document.getElementById('obs-capture-icons');
+      captureRow.innerHTML = '';
+      CAPTURE_ICONS.forEach(ic => {
+        const img = document.createElement('img');
+        img.dataset.key = ic.key;
+        img.src = ic.locked;
+        img.alt = ic.key;
+        captureRow.appendChild(img);
+      });
+
+      // Ability icons
+      const abilityRow = document.getElementById('obs-ability-icons');
+      abilityRow.innerHTML = '';
+      ABILITY_ICONS.forEach(ic => {
+        const img = document.createElement('img');
+        img.dataset.key = ic.key;
+        img.src = ic.locked;
+        img.alt = ic.key;
+        abilityRow.appendChild(img);
+      });
+    }
+
+    function buildMoonRow(idxOrKey, k, isOptional) {
+      const row = document.createElement('div');
+      row.className = 'obs-moon-row';
+      if (isOptional) row.classList.add('obs-optional-row');
+      row.dataset.obsKey = isOptional ? idxOrKey : String(idxOrKey);
+      row.dataset.obsType = isOptional ? 'optional' : 'main';
+
+      const lockImg = document.createElement('img');
+      lockImg.className = 'obs-lock';
+      lockImg.src = 'assets/lock.png';
+      lockImg.alt = 'lock';
+
+      const peaceImg = document.createElement('img');
+      peaceImg.className = 'obs-peace';
+      peaceImg.src = 'assets/peace.png';
+      peaceImg.alt = 'peace';
+
+      const kingImg = document.createElement('img');
+      kingImg.className = 'obs-kingdom';
+      kingImg.src = k.img;
+      kingImg.alt = k.name || k.label;
+
+      const moontickImg = document.createElement('img');
+      moontickImg.className = 'obs-moontick hidden';
+      moontickImg.src = k.moontick || k.img;
+      moontickImg.alt = 'tick';
+
+      const countSpan = document.createElement('span');
+      countSpan.className = 'obs-count';
+      countSpan.textContent = '0 / ?';
+
+      // Lock/peace stacked vertically (lock on top, peace below) — only for main rows and Moon Kingdom
+      if (!isOptional || idxOrKey === 'moon_kingdom') {
+        const stack = document.createElement('div');
+        stack.className = 'obs-lock-peace-stack';
+        stack.appendChild(lockImg);
+        stack.appendChild(peaceImg);
+        row.appendChild(stack);
+      }
+      row.appendChild(kingImg);
+      row.appendChild(moontickImg);
+      row.appendChild(countSpan);
+      return row;
+    }
+
+    function updateOBS(s) {
+      currentState = s || currentState;
+      if (!currentState) return;
+      applyScale();
+      applyBackground();
+
+      const settings = currentState.settings || {};
+      const optCounters = currentState.optional_counters || {};
+      const showWhite = !!settings.white_icon_mode;
+      const showColors = settings.show_icon_colors !== false;
+      const applyWhiteToKingdom = showWhite || !showColors;
+      const obsHideOptional = !!settings.obs_hide_optional;
+      const showMoontick = !!settings.show_moontick;
+      const showPeace = settings.show_peace !== false;
+
+      // Main kingdom rows
+      KINGDOMS.forEach((_, i) => {
+        const row = document.querySelector(`.obs-moon-row[data-obs-key="${i}"][data-obs-type="main"]`);
+        if (!row) return;
+        const m = (currentState.moons && currentState.moons[i]) || {};
+
+        const lockEl = row.querySelector('.obs-lock');
+        const peaceEl = row.querySelector('.obs-peace');
+        if (lockEl) {
+          lockEl.src = m.lock ? 'assets/unlock.png' : 'assets/lock.png';
+          lockEl.classList.toggle('hidden-icon', !showPeace);
+        }
+        if (peaceEl) {
+          // Peace above lock in OBS: swap order — lock on top, peace below
+          peaceEl.src = m.peace ? 'assets/peace_unlock.png' : 'assets/peace.png';
+          peaceEl.classList.toggle('hidden-icon', !showPeace);
+        }
+
+        const kImg = row.querySelector('.obs-kingdom');
+        kImg.classList.toggle('icon-white', applyWhiteToKingdom);
+
+        const moontickEl = row.querySelector('.obs-moontick');
+        if (moontickEl) {
+          moontickEl.classList.toggle('hidden', !showMoontick);
+          moontickEl.classList.remove('icon-white'); // never white
+        }
+
+        const maxDisplay = (m.max !== null && m.max !== undefined) ? m.max : '?';
+        row.querySelector('.obs-count').textContent = `${m.count || 0} / ${maxDisplay}`;
+
+        const isComplete = settings.show_complete_color && (
+          (m.max !== null && m.max !== undefined && (m.count || 0) >= m.max) ||
+          ((m.count || 0) >= KINGDOMS[i].max)
+        );
+        row.querySelector('.obs-count').classList.toggle('count-complete', isComplete);
+      });
+
+      // Moon Kingdom row (always shown if toggle is on, never hidden by obs_hide_optional)
+      const mkRow = document.querySelector('.obs-moon-row[data-obs-key="moon_kingdom"]');
+      if (mkRow) {
+        const mkShown = !!settings.show_moon_kingdom;
+        mkRow.classList.toggle('obs-hidden', !mkShown);
+        if (mkShown) {
+          const mkData = optCounters['moon_kingdom'] || { count: 0, max: null, lock: false, peace: false };
+          const mkKImg = mkRow.querySelector('.obs-kingdom');
+          mkKImg.classList.toggle('icon-white', applyWhiteToKingdom);
+          const mkMoontick = mkRow.querySelector('.obs-moontick');
+          if (mkMoontick) {
+            mkMoontick.classList.toggle('hidden', !showMoontick);
+            mkMoontick.classList.remove('icon-white');
+          }
+          const mkLock = mkRow.querySelector('.obs-lock');
+          const mkPeace = mkRow.querySelector('.obs-peace');
+          if (mkLock) {
+            mkLock.src = mkData.lock ? 'assets/unlock.png' : 'assets/lock.png';
+            mkLock.classList.toggle('hidden-icon', !showPeace);
+          }
+          if (mkPeace) {
+            mkPeace.src = mkData.peace ? 'assets/peace_unlock.png' : 'assets/peace.png';
+            mkPeace.classList.toggle('hidden-icon', !showPeace);
+          }
+          const mkMax = mkData.max !== null ? mkData.max : '?';
+          mkRow.querySelector('.obs-count').textContent = `${mkData.count || 0} / ${mkMax}`;
+        }
+      }
+
+      // Capture icons
+      CAPTURE_ICONS.forEach(ic => {
+        const img = document.querySelector(`#obs-capture-icons img[data-key="${ic.key}"]`);
+        if (img && currentState.captures) img.src = currentState.captures[ic.key] ? ic.unlocked : ic.locked;
+      });
+
+      // Ability icons
+      ABILITY_ICONS.forEach(ic => {
+        const img = document.querySelector(`#obs-ability-icons img[data-key="${ic.key}"]`);
+        if (img && currentState.abilities) img.src = currentState.abilities[ic.key] ? ic.unlocked : ic.locked;
+      });
+
+      // Bowser
+      const bowserImg = document.getElementById('obs-bowser-img');
+      if (bowserImg && currentState.captures) {
+        bowserImg.src = currentState.captures.bowser ? 'assets/Bowser_Capture.png' : 'assets/Bowser_Capture_Locked.png';
+      }
+
+      // Total — main kingdoms + Moon Kingdom if shown
+      const totalEl = document.getElementById('obs-total');
+      const totalWrap = document.getElementById('obs-total-wrap');
+      const mainTotal = (currentState.moons || []).reduce((sum, m) => sum + (m.count || 0), 0);
+      const mkCount = settings.show_moon_kingdom ? ((optCounters['moon_kingdom'] && optCounters['moon_kingdom'].count) || 0) : 0;
+      const total = mainTotal + mkCount;
+      const req = settings.moon_requirement || 124;
+      totalEl.textContent = `${total} / ${req}`;
+      totalWrap.classList.toggle('hidden', settings.show_moon_total === false);
+
+      // Section visibility
+      document.getElementById('obs-capture-section').classList.toggle('hidden', settings.show_captures === false);
+      document.getElementById('obs-bowser').classList.toggle('hidden', settings.show_captures === false);
+      document.getElementById('obs-ability-section').classList.toggle('hidden', settings.show_ability_lock === false);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      applyBackground();
+
+      if (isPopup) {
+        document.documentElement.classList.add('popup-mode');
+        document.body.classList.add('popup-mode');
+        window.addEventListener('resize', applyScale);
+        window.addEventListener('storage', (e) => {
+          if (e.key !== STATE_KEY || serverMode) return;
+          updateOBS(loadTrackerState());
+        });
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) return;
+          updateOBS(serverMode ? currentState : loadTrackerState());
+        });
+        if (!room) updateOBS(loadTrackerState());
+      }
+
+      applyScale();
+      buildOBSLayout();
+
+      if (room && window.SMOSync) {
+        serverMode = true;
+        window.SMOSync.onState((remoteState) => updateOBS(remoteState));
+        window.SMOSync.connect(room, wsUrl);
+      }
+    });
+  </script>
+</body>
+</html>
